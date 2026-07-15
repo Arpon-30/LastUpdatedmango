@@ -47,7 +47,8 @@ Open http://localhost:8501
 3. Go to [share.streamlit.io](https://share.streamlit.io) → **New app**
 4. Select repo / branch `main`
 5. Main file path: `streamlit_app.py`
-6. Click **Deploy**
+6. In **Advanced settings**, set **Python version to 3.11** (required for PyTorch)
+7. Click **Deploy**
 
 First boot downloads CLIP (`openai/clip-vit-base-patch32`) from Hugging Face and may take several minutes. Free-tier RAM is limited; if the app is killed for memory, reboot from Manage app.
 
