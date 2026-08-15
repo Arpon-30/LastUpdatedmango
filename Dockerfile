@@ -1,31 +1,51 @@
+# mango-disease-ai — FastAPI Docker image
+# Builds a CPU-only image suitable for Hugging Face Spaces (free tier)
+#
+# Build:  docker build -t mango-disease-ai:latest .
+# Run:    docker run -p 7860:7860 mango-disease-ai:latest
+# Docs:   http://localhost:7860/docs
+
 FROM python:3.10-slim
 
-# System deps
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends libgl1 libglib2.0-0 && \
-    rm -rf /var/lib/apt/lists/*
+# ── System dependencies ────────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgl1 \
+        libglib2.0-0 \
+        libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user (HF Spaces requirement)
-RUN useradd -m -u 1000 user
-WORKDIR /home/user/app
+# ── Create non-root user (required by Hugging Face Spaces) ────────────────
+RUN useradd -m -u 1000 appuser
+WORKDIR /app
 
-# Install CPU-only PyTorch first (saves ~1.5 GB vs full CUDA build)
-RUN pip install --no-cache-dir \
-    torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# ── Install Python dependencies ───────────────────────────────────────────
+# Copy requirements first for better Docker layer caching
+COPY api/requirements.txt ./requirements.txt
 
-# Install remaining Python deps
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY . .
+# ── Copy application code ─────────────────────────────────────────────────
+COPY model.py inference.py report.py ./
+COPY mango_disease_ai/ ./mango_disease_ai/
+COPY api/ ./api/
+COPY AA-ENet_proposed.pt ./
 
-# Fix ownership
-RUN chown -R user:user /home/user/app
+# ── Ownership ──────────────────────────────────────────────────────────────
+RUN chown -R appuser:appuser /app
+USER appuser
 
-USER user
+# ── Hugging Face Spaces cache directory ───────────────────────────────────
+ENV HF_HOME=/app/.cache/huggingface
+ENV TRANSFORMERS_CACHE=/app/.cache/huggingface
+ENV MANGO_MODEL_PATH=/app/AA-ENet_proposed.pt
 
-# HF Spaces expects port 7860
+# ── Expose port 7860 (Hugging Face Spaces default) ────────────────────────
 EXPOSE 7860
 
-CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:7860", "--workers", "1", "--threads", "4", "--timeout", "120"]
+# ── Start FastAPI with uvicorn ─────────────────────────────────────────────
+CMD ["uvicorn", "api.main:app", \
+     "--host", "0.0.0.0", \
+     "--port", "7860", \
+     "--workers", "1", \
+     "--timeout-keep-alive", "120"]
